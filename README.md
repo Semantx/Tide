@@ -1,0 +1,1 @@
+# Tide - Terminal Integrated Development Environment
