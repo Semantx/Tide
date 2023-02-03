@@ -8,7 +8,7 @@
 #elif ((defined(sun) || defined(__sun)) && (defined(__SVR4) || defined(__svr4__)))
 #define SEMANTX_TIDE_DEV_NAV_OS "/proc/self/path/a.out"
 #else
-#error Build error: Invalid target (expected Linux, FreeBSD, or Solaris)
+#error: Invalid build target (expected Linux, FreeBSD, or Solaris)
 #endif
 #define SEMANTX_TIDE_DEV_NAV_VALUE(arg) #arg
 #define SEMANTX_TIDE_DEV_NAV_STRING(arg) SEMANTX_TIDE_DEV_NAV_VALUE(arg)
