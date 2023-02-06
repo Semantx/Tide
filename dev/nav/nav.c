@@ -65,13 +65,17 @@ int main(int argc, char **argv) {
 			}
 		}
 		fputs("Optional arguments:\n-i FILE (default: input.cfg)\n-o FILE (default: output.dat)\n", stderr);
+		fflush(stdout);
+		fflush(stderr);
 		return EXIT_SUCCESS;
 	}
 	char buf[PATH_MAX];
 	int size = readlink(SEMANTX_TIDE_DEV_NAV_OS, buf, PATH_MAX);
 	if (size < 2) {
 		SEMANTX_TIDE_DEV_NAV_READLINK: {
-			perror("Error: readlink(\"" SEMANTX_TIDE_DEV_NAV_OS "\", buf, " SEMANTX_TIDE_DEV_NAV_STRING(PATH_MAX) ") failed");
+			perror("Error: readlink(\"" SEMANTX_TIDE_DEV_NAV_OS "\" {SEMANTX_TIDE_DEV_NAV_OS}, buf, " SEMANTX_TIDE_DEV_NAV_STRING(PATH_MAX) " {PATH_MAX}) failed");
+			fflush(stdout);
+			fflush(stderr);
 			return EXIT_FAILURE;
 		}
 	}
@@ -84,6 +88,8 @@ int main(int argc, char **argv) {
 			buf[size + 1] = '\0';
 			fputs("Error: File path is too long\n", stderr);
 			fprintf(stderr, "Error: Buffer overflow: strlen(\"%s%c%s\" {iName}) exceeds " SEMANTX_TIDE_DEV_NAV_STRING(PATH_MAX) " {PATH_MAX}\n", buf, buf[size], iName);
+			fflush(stdout);
+			fflush(stderr);
 			return EXIT_FAILURE;
 		}
 	}
@@ -97,6 +103,8 @@ int main(int argc, char **argv) {
 	if (!iFile) {
 		SEMANTX_TIDE_DEV_NAV_FOPEN: {
 			fprintf(stderr, "Error: fopen(\"%s\" {buf}, \"%c\") failed: %s\n", buf, iFile ? 'w' : 'r', strerror(errno));
+			fflush(stdout);
+			fflush(stderr);
 			return EXIT_FAILURE;
 		}
 	}
@@ -145,23 +153,10 @@ int main(int argc, char **argv) {
 						}
 						global = pointer;
 						local = global + size - 1;
-						SEMANTX_TIDE_DEV_NAV_NEW: {
-							local->size = '\0';
-							local->modifiers = '\0';
-							local->shortcuts = 0;
-							local->children = NULL;
-							if (c == 45) {
-								local->name = NULL;
-								context = '\x09';
-							} else {
-								offset = column;
-								context = '\x01';
-							}
-							goto SEMANTX_TIDE_DEV_NAV_INPUT;
-						}
+						goto SEMANTX_TIDE_DEV_NAV_NEW;
 					} else if (global) {
 						local = NULL;
-						for (unsigned i = 1; i <= column; ++i) {
+						for (long i = 1; i <= column; ++i) {
 							if (i == column) {
 								pointer = (struct nav *)realloc(local->children, sizeof(struct nav) * (++local->size));
 								if (!pointer) {
@@ -171,13 +166,26 @@ int main(int argc, char **argv) {
 								local->children = pointer;
 								pointer = local;
 								local = local->children + local->size - 1;
-								goto SEMANTX_TIDE_DEV_NAV_NEW;
+								SEMANTX_TIDE_DEV_NAV_NEW: {
+									local->size = '\0';
+									local->modifiers = '\0';
+									local->shortcuts = 0;
+									local->children = NULL;
+									if (c == 45) {
+										local->name = NULL;
+										context = '\x09';
+									} else {
+										offset = column;
+										context = '\x01';
+									}
+									goto SEMANTX_TIDE_DEV_NAV_INPUT;
+								}
 							} else if (!local) {
 								local = global + size - 1;
 							} else if (local->children) {
 								local = local->children + local->size - 1;
 							} else {
-								fprintf(stderr, "Error: '[' expected, got '\\t' (row %li, column %u)\n", row, i);
+								fprintf(stderr, "Error: '[' expected, got '\\t' (row %li, column %li)\n", row, i);
 								goto SEMANTX_TIDE_DEV_NAV_EXIT;
 							}
 						}
@@ -340,14 +348,14 @@ char output(struct nav *nav, char size, FILE *oFile) {
 		if (nav[i].name) {
 			if (fputs(nav[i].name, oFile) == EOF) {
 				fprintf(stderr, "Error: fputs(\"%s\" {nav[%i {i}].name}, oFile) failed: %s\n", nav[i].name, i, strerror(errno));
-			} else if (fprintf(oFile, "\\x0%i", nav[i].shortcuts & 65280 ? 3 : nav[i].shortcuts ? 2 : 1) < 0) {
-				fprintf(stderr, "Error: fprintf(oFile, \"\\\\x0%%i\", %i {nav[%i {i}].shortcuts & 65280 ? 3 : nav[%i {i}].shortcuts ? 2 : 1}) failed: %s\n", nav[i].shortcuts & 65280 ? 3 : nav[i].shortcuts ? 2 : 1, i, i, strerror(errno));
-			} else if (nav[i].shortcuts & 255) {
+			} else if (fprintf(oFile, "\\x0%c", nav[i].shortcuts > 255 ? '3' : nav[i].shortcuts ? '2' : '1') < 0) {
+				fprintf(stderr, "Error: fprintf(oFile, \"\\\\x0%%i\", %i {nav[%i {i}].shortcuts > 255 ? 3 : nav[%i {i}].shortcuts ? 2 : 1}) failed: %s\n", nav[i].shortcuts > 255 ? 3 : nav[i].shortcuts ? 2 : 1, i, i, strerror(errno));
+			} else if (nav[i].shortcuts) {
 				if (fprintf(oFile, "\\x%02x", nav[i].modifiers) < 0) {
 					fprintf(stderr, "Error: fprintf(oFile, \"\\\\x%%02x\", %i {nav[%i {i}].modifiers}) failed: %s\n", nav[i].modifiers, i, strerror(errno));
 				} else if (fprintf(oFile, "\\x%02x", nav[i].shortcuts & 255) < 0) {
 					fprintf(stderr, "Error: fprintf(oFile, \"\\\\x%%02x\", %i {nav[%i {i}].shortcuts & 255}) failed: %s\n", nav[i].shortcuts & 255, i, strerror(errno));
-				} else if (nav[i].shortcuts & 65280 && fprintf(oFile, "\\x%02x", nav[i].shortcuts >> 4 & 255) < 0) {
+				} else if (nav[i].shortcuts > 255 && fprintf(oFile, "\\x%02x", nav[i].shortcuts >> 4 & 255) < 0) {
 					fprintf(stderr, "Error: fprintf(oFile, \"\\\\x%%02x\", %i {nav[%i {i}].shortcuts >> 4 & 255}) failed: %s\n", nav[i].shortcuts >> 4 & 255, i, strerror(errno));
 				} else {
 					SEMANTX_TIDE_DEV_NAV_SIZE: {
@@ -379,7 +387,7 @@ void success(struct nav *nav, char size, unsigned short depth) {
 		if (nav[i].name) {
 			printf("[ %s ]", nav[i].name);
 			char *buf = " > ";
-			while (nav[i].shortcuts & 255) {
+			while (nav[i].shortcuts) {
 				char shortcut = nav[i].shortcuts & 255;
 				fputs(buf, stdout);
 				if (nav[i].modifiers & '\x40') {
